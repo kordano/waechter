@@ -14,7 +14,8 @@
             [clojure.core.async :refer [timeout sub chan <!! >!! <! >! go go-loop] :as async]))
 
 
-(def eval-fn {'(fn replace [old params] params) (fn replace [old params] params)})
+(def eval-fn {'(fn replace [old params] params) (fn replace [old params] params)
+              '(fn [old params] (clojure.set/union old params)) (fn [old params] (clojure.set/union old params))})
 
 (defn create-store
   "Creates a konserve store"
@@ -58,6 +59,8 @@
 
 
 (comment
+
+
   (def test-state
     (atom {:build :dev
            :behind-proxy false
@@ -70,22 +73,41 @@
            :trusted-hosts #{}
            }))
 
-  (atom (read-string "{\"eve@waechter.net\" {#uuid \"5e2dd6ce-8edb-417b-8ede-39f5314fce17\" {:causal-order {#uuid \"21d50fd8-d812-58f9-816f-46087302dc0a\" []}, :last-update #inst \"2014-07-04T21:07:57.183-00:00\", :id #uuid \"5e2dd6ce-8edb-417b-8ede-39f5314fce17\", :description \"Security Service.\", :schema {:type \"http://github.com/ghubber/geschichte\", :version 1}, :head \"master\", :branches {\"master\" #{#uuid \"21d50fd8-d812-58f9-816f-46087302dc0a\"}}, :public false, :pull-requests {}}}, #uuid \"21d50fd8-d812-58f9-816f-46087302dc0a\" {:transactions [[#uuid \"267cb59b-3168-512e-a787-b84372ab0756\" #uuid \"123ed64b-1e25-59fc-8c5b-038636ae6c3d\"]], :parents [], :ts #inst \"2014-07-04T21:07:57.183-00:00\", :author \"eve@waechter.net\"}, #uuid \"267cb59b-3168-512e-a787-b84372ab0756\" #{}, #uuid \"123ed64b-1e25-59fc-8c5b-038636ae6c3d\" (fn replace [old params] params), datascript.Datom #<database$eval21452$fn__21453 waechter.database$eval21452$fn__21453@208aa623>}"))
+  (def store (<!! (new-mem-store)))
+
+  (def peer (client-peer "CLIENT" store (partial auth store auth-fn (fn [creds] nil) (:trusted-hosts @test-state))))
+
+  (def stage (<!! (s/create-stage! "eve@waechter.net" peer eval-fn )))
+
+  (def repo-id (<!! (s/create-repo! stage "eve@waechter.net" "Synched secured stuff." #{{:username "eve@waechter.net" :account "topiq.es" :pw "1234"}} "master")))
+
+(<!! (s/subscribe-repos! stage
+                          {"eve@polyc0l0r.net"
+                           {repo-id
+                            #{"master"}}}))
+
+  (go (<! (s/transact
+           stage
+           ["eve@waechter.net"
+            repo-id
+            "master"]
+           #{{:username "eve@waechter.net" :account "friendface" :pw "4321"}}
+
+           '(fn [old params] (clojure.set/union old params))))
+    (<! (s/commit! stage {"eve@waechter.net" {repo-id #{"master"}}})))
+
+  (-> @stage :volatile)
 
 
-  (let [store (<!! (new-mem-store
-                    (atom (read-string "{\"eve@waechter.net\" {#uuid \"5e2dd6ce-8edb-417b-8ede-39f5314fce17\" {:causal-order {#uuid \"21d50fd8-d812-58f9-816f-46087302dc0a\" []}, :last-update #inst \"2014-07-04T21:07:57.183-00:00\", :id #uuid \"5e2dd6ce-8edb-417b-8ede-39f5314fce17\", :description \"Security Service.\", :schema {:type \"http://github.com/ghubber/geschichte\", :version 1}, :head \"master\", :branches {\"master\" #{#uuid \"21d50fd8-d812-58f9-816f-46087302dc0a\"}}, :public false, :pull-requests {}}}, #uuid \"21d50fd8-d812-58f9-816f-46087302dc0a\" {:transactions [[#uuid \"267cb59b-3168-512e-a787-b84372ab0756\" #uuid \"123ed64b-1e25-59fc-8c5b-038636ae6c3d\"]], :parents [], :ts #inst \"2014-07-04T21:07:57.183-00:00\", :author \"eve@waechter.net\"}, #uuid \"267cb59b-3168-512e-a787-b84372ab0756\" #{}, #uuid \"123ed64b-1e25-59fc-8c5b-038636ae6c3d\" (fn replace [old params] params), datascript.Datom #<database$eval21452$fn__21453 waechter.database$eval21452$fn__21453@208aa623>}"))
-                    (atom {'datascript.Datom
-                            (fn [val] (info "DATASCRIPT-DATOM:" val)
-                              (konserve.literals.TaggedLiteral. 'datascript.Datom val))})))
-        peer (client-peer "CLIENT" store (partial auth store auth-fn (fn [creds] nil) (:trusted-hosts @test-state)))
-        stage (<!! (s/create-stage! "eve@waechter.net" peer eval-fn ))]
-    (-> (get-in @stage [:volatile :peer])
-        deref
-        :volatile
-        :store
-        :state
-        deref))
+  (clojure.set/union #{123} #{234})
 
+  (atom
+   {"eve@waechter.net" {#uuid "b7e2c3e4-d4c5-4d75-a092-b7b1cc9731dc" {:causal-order {#uuid "3305b822-01e7-58fd-a387-505f9a8252f5" []}, :last-update #inst "2014-07-05T16:51:20.812-00:00", :id #uuid "b7e2c3e4-d4c5-4d75-a092-b7b1cc9731dc", :description "Synched secured stuff.", :schema {:type "http://github.com/ghubber/geschichte", :version 1}, :head "master", :branches {"master" #{#uuid "3305b822-01e7-58fd-a387-505f9a8252f5"}}, :public false, :pull-requests {}}}, #uuid "3305b822-01e7-58fd-a387-505f9a8252f5" {:transactions [[#uuid "1ff2e0a8-fbce-51d3-b4eb-eca611e1d165" #uuid "123ed64b-1e25-59fc-8c5b-038636ae6c3d"]], :parents [], :ts #inst "2014-07-05T16:51:20.812-00:00", :author "eve@waechter.net"}, #uuid "123ed64b-1e25-59fc-8c5b-038636ae6c3d" (fn replace [old params] params), #uuid "1ff2e0a8-fbce-51d3-b4eb-eca611e1d165" #{{:username "eve@waechter.net", :account "topiq.es", :pw "1234"}}})
+
+
+
+
+
+  (atom (read-string "{\"eve@waechter.net\" {#uuid \"b7e2c3e4-d4c5-4d75-a092-b7b1cc9731dc\" {:causal-order {#uuid \"3305b822-01e7-58fd-a387-505f9a8252f5\" []}, :last-update #inst \"2014-07-05T16:51:20.812-00:00\", :id #uuid \"b7e2c3e4-d4c5-4d75-a092-b7b1cc9731dc\", :description \"Synched secured stuff.\", :schema {:type \"http://github.com/ghubber/geschichte\", :version 1}, :head \"master\", :branches {\"master\" #{#uuid \"3305b822-01e7-58fd-a387-505f9a8252f5\"}}, :public false, :pull-requests {}}}, #uuid \"3305b822-01e7-58fd-a387-505f9a8252f5\" {:transactions [[#uuid \"1ff2e0a8-fbce-51d3-b4eb-eca611e1d165\" #uuid \"123ed64b-1e25-59fc-8c5b-038636ae6c3d\"]], :parents [], :ts #inst \"2014-07-05T16:51:20.812-00:00\", :author \"eve@waechter.net\"}, #uuid \"123ed64b-1e25-59fc-8c5b-038636ae6c3d\" (fn replace [old params] params), #uuid \"1ff2e0a8-fbce-51d3-b4eb-eca611e1d165\" #{{:username \"eve@waechter.net\", :account \"topiq.es\", :pw \"1234\"}}}"))
 
   )
